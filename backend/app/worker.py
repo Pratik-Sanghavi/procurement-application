@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -15,6 +16,10 @@ async def run_worker() -> None:
         client,
         task_queue=settings.temporal_task_queue,
         workflows=[PurchaseOrderProcessingWorkflow, ChatRoutingWorkflow, OrderQuestionWorkflow, OrderChangeRequestWorkflow],
+        activity_executor=ThreadPoolExecutor(
+            max_workers=8,
+            thread_name_prefix="procurement-activity",
+        ),
         activities=[
             create_processing_run,
             extract_pdf_text,
