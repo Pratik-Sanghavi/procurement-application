@@ -49,6 +49,8 @@ def classify_chat_intent(message_id: int, database_path: str) -> dict:
         conversation = session.get(ChatConversation, message.conversation_id)
         if conversation is None:
             raise ValueError(f"Conversation for chat message {message_id} does not exist")
+        if message.intent is not None:
+            return {"intent": message.intent, "confidence": None}
         decision = JevClient(
             api_key=settings.typesafe_api_key,
             model=settings.typesafe_model,
@@ -79,6 +81,9 @@ def answer_order_question(message_id: int, database_path: str) -> dict[str, int]
     factory = session_factory(Path(database_path))
     with factory.begin() as session:
         message, conversation, order, version = _message_context(session, message_id)
+        existing = session.scalar(select(ChatMessage).where(ChatMessage.reply_to_message_id == message.id, ChatMessage.message_type == "answer", ChatMessage.intent == "question"))
+        if existing is not None:
+            return {"response_message_id": existing.id}
         snapshot_json = version_response(version).model_dump_json()
         completion = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
             model=settings.openai_extraction_model,
@@ -111,6 +116,11 @@ def propose_order_change(message_id: int, database_path: str) -> dict[str, int]:
     factory = session_factory(Path(database_path))
     with factory.begin() as session:
         message, conversation, order, version = _message_context(session, message_id)
+        existing_response = session.scalar(select(ChatMessage).where(ChatMessage.reply_to_message_id == message.id, ChatMessage.message_type == "change_proposal"))
+        if existing_response is not None:
+            existing_draft = session.scalar(select(AgentChangeDraft).where(AgentChangeDraft.chat_message_id == existing_response.id))
+            if existing_draft is not None:
+                return {"response_message_id": existing_response.id, "draft_id": existing_draft.id}
         current_snapshot = version_response(version).model_dump_json()
         completion = OpenAI(api_key=settings.openai_api_key).beta.chat.completions.parse(
             model=settings.openai_extraction_model,
@@ -166,6 +176,9 @@ def respond_to_unsupported_request(message_id: int, database_path: str) -> dict[
     factory = session_factory(Path(database_path))
     with factory.begin() as session:
         message, conversation, order, _ = _message_context(session, message_id)
+        existing = session.scalar(select(ChatMessage).where(ChatMessage.reply_to_message_id == message.id, ChatMessage.message_type == "answer", ChatMessage.intent == "other"))
+        if existing is not None:
+            return {"response_message_id": existing.id}
         response = ChatMessage(
             conversation_id=conversation.id,
             reply_to_message_id=message.id,

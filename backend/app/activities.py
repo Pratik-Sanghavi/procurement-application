@@ -12,7 +12,7 @@ from temporalio import activity
 from .config import Settings
 from .database import session_factory
 from .events import publish_order_event
-from .models import Attachment, Email, ProcessingRun, PurchaseOrder
+from .models import Attachment, Email, OrderVersion, ProcessingRun, PurchaseOrder
 from .schemas import OrderSnapshotInput
 from .services.orders import append_version
 
@@ -89,35 +89,39 @@ def extract_order_snapshot(pdf_text: str) -> dict:
 
 @activity.defn
 def persist_supplier_version(email_id: int, processing_run_id: int, snapshot_data: dict, database_path: str) -> dict[str, int]:
+    """Persist exactly one order version per source email despite activity retries."""
     snapshot = OrderSnapshotInput.model_validate(snapshot_data)
     factory = session_factory(Path(database_path))
     with factory.begin() as session:
         email = session.get(Email, email_id)
         if email is None:
             raise ValueError(f"Email {email_id} does not exist")
-        order = session.scalar(select(PurchaseOrder).where(PurchaseOrder.supplier_order_number == snapshot.supplier_order_number))
-        if order is None:
-            order = PurchaseOrder(thread_id=email.thread_id, supplier_order_number=snapshot.supplier_order_number)
-            session.add(order)
-            session.flush()
-        version = append_version(
-            session,
-            order=order,
-            snapshot=snapshot,
-            source_type="supplier_acknowledgement",
-            actor_type="agent",
-            source_email_id=email_id,
-            audit_action="supplier_acknowledgement.processed",
-        )
+        existing = session.scalar(select(OrderVersion).where(OrderVersion.source_email_id == email_id))
+        if existing is not None:
+            result = {"order_id": existing.order_id, "version_id": existing.id}
+        else:
+            order = session.scalar(select(PurchaseOrder).where(PurchaseOrder.supplier_order_number == snapshot.supplier_order_number))
+            if order is None:
+                order = PurchaseOrder(thread_id=email.thread_id, supplier_order_number=snapshot.supplier_order_number)
+                session.add(order)
+                session.flush()
+            version = append_version(
+                session,
+                order=order,
+                snapshot=snapshot,
+                source_type="supplier_acknowledgement",
+                actor_type="agent",
+                source_email_id=email_id,
+                audit_action="supplier_acknowledgement.processed",
+            )
+            result = {"order_id": order.id, "version_id": version.id}
         run = session.get(ProcessingRun, processing_run_id)
         if run is not None:
             run.status = "completed"
             run.stage = "persisted"
             run.completed_at = datetime.now(UTC)
-        result = {"order_id": order.id, "version_id": version.id}
     publish_order_event(result["order_id"], {"type": "order.version_created", "version_id": result["version_id"]})
     return result
-
 
 @activity.defn
 def mark_processing_failed(processing_run_id: int, error_summary: str, database_path: str) -> None:

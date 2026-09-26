@@ -47,7 +47,7 @@ CREATE TABLE order_versions (
     version_number INTEGER NOT NULL,
     source_type VARCHAR(32) NOT NULL,
     created_by_type VARCHAR(16) NOT NULL CHECK (created_by_type IN ('agent', 'human')),
-    source_email_id INTEGER REFERENCES emails(id),
+    source_email_id INTEGER UNIQUE REFERENCES emails(id),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_order_version_number UNIQUE (order_id, version_number)
 );

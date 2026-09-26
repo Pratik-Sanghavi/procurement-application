@@ -69,7 +69,7 @@ class OrderVersion(Base, Timestamped):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
     created_by_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    source_email_id: Mapped[Optional[int]] = mapped_column(ForeignKey("emails.id"))
+    source_email_id: Mapped[Optional[int]] = mapped_column(ForeignKey("emails.id"), unique=True)
     order: Mapped[PurchaseOrder] = relationship(back_populates="versions", foreign_keys=[order_id])
     supplier: Mapped[Optional[SupplierSnapshot]] = relationship(back_populates="order_version", uselist=False, cascade="all, delete-orphan")
     details: Mapped[Optional[OrderDetailsSnapshot]] = relationship(back_populates="order_version", uselist=False, cascade="all, delete-orphan")
