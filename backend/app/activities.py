@@ -11,6 +11,7 @@ from temporalio import activity
 
 from .config import Settings
 from .database import session_factory
+from .events import publish_order_event
 from .models import Attachment, Email, ProcessingRun, PurchaseOrder
 from .schemas import OrderSnapshotInput
 from .services.orders import append_version
@@ -113,7 +114,9 @@ def persist_supplier_version(email_id: int, processing_run_id: int, snapshot_dat
             run.status = "completed"
             run.stage = "persisted"
             run.completed_at = datetime.now(UTC)
-        return {"order_id": order.id, "version_id": version.id}
+        result = {"order_id": order.id, "version_id": version.id}
+    publish_order_event(result["order_id"], {"type": "order.version_created", "version_id": result["version_id"]})
+    return result
 
 
 @activity.defn
@@ -121,8 +124,29 @@ def mark_processing_failed(processing_run_id: int, error_summary: str, database_
     factory = session_factory(Path(database_path))
     with factory.begin() as session:
         run = session.get(ProcessingRun, processing_run_id)
-        if run is not None:
-            run.status = "failed"
-            run.stage = "failed"
-            run.error_summary = error_summary[:2_000]
-            run.completed_at = datetime.now(UTC)
+        if run is None:
+            return
+        run.status = "failed"
+        run.stage = "failed"
+        run.error_summary = error_summary[:2_000]
+        run.completed_at = datetime.now(UTC)
+        email = session.get(Email, run.email_id)
+        order_id = session.scalar(select(PurchaseOrder.id).where(PurchaseOrder.thread_id == email.thread_id)) if email else None
+    if order_id is not None:
+        publish_order_event(order_id, {"type": "processing.failed", "processing_run_id": processing_run_id})
+
+
+@activity.defn
+def set_processing_stage(processing_run_id: int, stage: str, database_path: str) -> None:
+    """Persist an observable workflow stage and notify an already-known order."""
+    factory = session_factory(Path(database_path))
+    with factory.begin() as session:
+        run = session.get(ProcessingRun, processing_run_id)
+        if run is None:
+            raise ValueError(f"Processing run {processing_run_id} does not exist")
+        run.status = "running"
+        run.stage = stage
+        email = session.get(Email, run.email_id)
+        order_id = session.scalar(select(PurchaseOrder.id).where(PurchaseOrder.thread_id == email.thread_id)) if email else None
+    if order_id is not None:
+        publish_order_event(order_id, {"type": "processing.stage_changed", "processing_run_id": processing_run_id, "stage": stage})

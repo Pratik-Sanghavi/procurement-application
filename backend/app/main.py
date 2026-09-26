@@ -14,7 +14,7 @@ from temporalio.client import Client
 from .config import Settings, settings
 from .database import Base, create_sqlite_engine, session_dependency
 from .events import publish_order_event_async
-from .models import AgentChangeDraft, AuditEvent, ChatConversation, ChatMessage, OrderVersion, PurchaseOrder
+from .models import AgentChangeDraft, AuditEvent, ChatConversation, ChatMessage, Email, OrderVersion, ProcessingRun, PurchaseOrder
 from .realtime import relay_order_events
 from .schemas import (
     AgentChangeDraftResponse,
@@ -24,7 +24,10 @@ from .schemas import (
     OrderSnapshotInput,
     OrderSummaryResponse,
     OrderVersionResponse,
+    ProcessingRunResponse,
+    VersionDiffResponse,
 )
+from .services.diffs import version_diff
 from .services.orders import append_version, get_order, order_query, summary_response, version_response
 from .workflows import ChatRoutingWorkflow
 
@@ -88,6 +91,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
             relay_task.cancel()
             with suppress(asyncio.CancelledError):
                 await relay_task
+            engine.dispose()
 
     app = FastAPI(title="Procurement Assistant API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
@@ -122,6 +126,40 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         order = get_order(db, order_id)
         return [version_response(version) for version in sorted(order.versions, key=lambda value: value.version_number, reverse=True)]
 
+
+    @app.get("/orders/{order_id}/processing-runs", response_model=list[ProcessingRunResponse])
+    def list_processing_runs(order_id: int, db: Session = Depends(session)) -> list[ProcessingRunResponse]:
+        order = get_order(db, order_id)
+        runs = db.scalars(
+            select(ProcessingRun)
+            .join(Email, ProcessingRun.email_id == Email.id)
+            .where(Email.thread_id == order.thread_id)
+            .order_by(ProcessingRun.created_at.desc())
+        ).all()
+        return [
+            ProcessingRunResponse(
+                id=run.id,
+                email_id=run.email_id,
+                attachment_id=run.attachment_id,
+                temporal_workflow_id=run.temporal_workflow_id,
+                status=run.status,
+                stage=run.stage,
+                error_summary=run.error_summary,
+                completed_at=run.completed_at,
+                created_at=run.created_at,
+            )
+            for run in runs
+        ]
+
+    @app.get("/orders/{order_id}/versions/{version_id}/diff", response_model=VersionDiffResponse)
+    def compare_versions(order_id: int, version_id: int, base_version_id: int, db: Session = Depends(session)) -> VersionDiffResponse:
+        order = get_order(db, order_id)
+        versions = {version.id: version for version in order.versions}
+        base = versions.get(base_version_id)
+        target = versions.get(version_id)
+        if base is None or target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order version not found")
+        return version_diff(base, target)
     @app.post("/orders/{order_id}/versions", response_model=OrderVersionResponse, status_code=status.HTTP_201_CREATED)
     async def save_manual_version(order_id: int, payload: OrderSnapshotInput, db: Session = Depends(session)) -> OrderVersionResponse:
         order = get_order(db, order_id)

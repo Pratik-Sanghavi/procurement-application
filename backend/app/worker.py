@@ -3,7 +3,7 @@ import asyncio
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from .activities import create_processing_run, extract_order_snapshot, extract_pdf_text, mark_processing_failed, persist_supplier_version
+from .activities import create_processing_run, extract_order_snapshot, extract_pdf_text, mark_processing_failed, persist_supplier_version, set_processing_stage
 from .chat_activities import answer_order_question, classify_chat_intent, propose_order_change, respond_to_unsupported_request
 from .config import settings
 from .workflows import ChatRoutingWorkflow, OrderChangeRequestWorkflow, OrderQuestionWorkflow, PurchaseOrderProcessingWorkflow
@@ -15,7 +15,18 @@ async def run_worker() -> None:
         client,
         task_queue=settings.temporal_task_queue,
         workflows=[PurchaseOrderProcessingWorkflow, ChatRoutingWorkflow, OrderQuestionWorkflow, OrderChangeRequestWorkflow],
-        activities=[create_processing_run, extract_pdf_text, extract_order_snapshot, persist_supplier_version, mark_processing_failed, classify_chat_intent, answer_order_question, propose_order_change, respond_to_unsupported_request],
+        activities=[
+            create_processing_run,
+            extract_pdf_text,
+            extract_order_snapshot,
+            set_processing_stage,
+            persist_supplier_version,
+            mark_processing_failed,
+            classify_chat_intent,
+            answer_order_question,
+            propose_order_change,
+            respond_to_unsupported_request,
+        ],
     )
     await worker.run()
 

@@ -31,7 +31,7 @@ def publish_order_event(order_id: int, event: dict[str, Any], settings: Settings
         with Redis.from_url(runtime_settings.redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2) as client:
             client.publish(order_channel(order_id), _event_payload(order_id, event))
     except RedisError:
-        logger.warning("Unable to publish Redis notification for order %s", order_id, exc_info=True)
+        logger.warning("Unable to publish Redis notification for order %s", order_id)
 
 
 async def publish_order_event_async(order_id: int, event: dict[str, Any], redis_url: str) -> bool:
@@ -41,7 +41,7 @@ async def publish_order_event_async(order_id: int, event: dict[str, Any], redis_
         await client.publish(order_channel(order_id), _event_payload(order_id, event))
         return True
     except RedisError:
-        logger.warning("Unable to publish Redis notification for order %s", order_id, exc_info=True)
+        logger.warning("Unable to publish Redis notification for order %s", order_id)
         return False
     finally:
         await client.aclose()

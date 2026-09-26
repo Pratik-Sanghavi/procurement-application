@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -107,3 +108,25 @@ class AgentChangeDraftResponse(BaseModel):
     status: str
     resolved_at: datetime | None
     created_at: datetime
+class ProcessingRunResponse(BaseModel):
+    id: int
+    email_id: int
+    attachment_id: int | None
+    temporal_workflow_id: str
+    status: str
+    stage: str | None
+    error_summary: str | None
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class VersionChange(BaseModel):
+    path: str
+    before: Any | None
+    after: Any | None
+
+
+class VersionDiffResponse(BaseModel):
+    base_version_id: int
+    version_id: int
+    changes: list[VersionChange]

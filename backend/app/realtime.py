@@ -35,8 +35,10 @@ async def relay_order_events(redis_url: str, deliver: Delivery, stop: asyncio.Ev
                         logger.warning("Discarding malformed Redis order event")
                         continue
                     await deliver(order_id, payload)
-        except RedisError:
-            logger.warning("Redis order-event relay disconnected; retrying", exc_info=True)
+        except asyncio.CancelledError:
+            raise
+        except RedisError as error:
+            logger.warning("Redis order-event relay disconnected; retrying: %s", error)
         finally:
             await client.aclose()
         try:
