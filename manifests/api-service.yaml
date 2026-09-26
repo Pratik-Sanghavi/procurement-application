@@ -6,4 +6,4 @@ metadata:
 spec:
   type: LoadBalancer
   selector: { app: procurement-backend }
-  ports: [{ port: 8000, targetPort: 8000, nodePort: 30002 }]
+  ports: [{ port: 8001, targetPort: 8000 }]
