@@ -5,5 +5,10 @@ metadata:
   namespace: procurement-ns-1
 spec:
   type: LoadBalancer
-  selector: { app: procurement-backend }
-  ports: [{ port: 8100, targetPort: 8000 }]
+  selector:
+    app: procurement-backend
+  ports:
+    - name: http
+      appProtocol: http
+      port: 8100
+      targetPort: 8000
