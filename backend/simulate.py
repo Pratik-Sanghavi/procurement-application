@@ -7,8 +7,12 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-import backend.handler as handler
-from backend.init_db import DEFAULT_DB
+try:
+    import handler
+    from init_db import DEFAULT_DB
+except ModuleNotFoundError:
+    import backend.handler as handler
+    from backend.init_db import DEFAULT_DB
 
 
 def read_email(path: Path) -> dict:

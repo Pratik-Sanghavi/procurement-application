@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: procurement-runtime
+  namespace: procurement-ns-1
+data:
+  TEMPORAL_ADDRESS: temporal-frontend.temporal.svc.cluster.local:7233
+  TEMPORAL_TASK_QUEUE: procurement-processing
+  REDIS_HOST: redis-master.redis-ns-1.svc.cluster.local
+  REDIS_PORT: "6379"
+  REDIS_DATABASE: "0"

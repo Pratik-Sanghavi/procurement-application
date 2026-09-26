@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: procurement-frontend
+  namespace: procurement-ns-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: procurement-frontend }
+  template:
+    metadata:
+      labels: { app: procurement-frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: localhost:5000/procurement/frontend:latest
+          ports: [{ containerPort: 3000 }]

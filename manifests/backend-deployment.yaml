@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: procurement-backend
+  namespace: procurement-ns-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: procurement-backend }
+  template:
+    metadata:
+      labels: { app: procurement-backend }
+    spec:
+      initContainers:
+        - name: initialize-database
+          image: localhost:5000/procurement/api:latest
+          command: ["sh", "-c", "test -f /data/app.sqlite3 || python init_db.py --db /data/app.sqlite3"]
+          volumeMounts: [{ name: data, mountPath: /data }]
+      containers:
+        - name: api
+          image: localhost:5000/procurement/api:latest
+          ports: [{ containerPort: 8000 }]
+          envFrom: [{ configMapRef: { name: procurement-runtime } }]
+          env:
+            - { name: DATABASE_PATH, value: /data/app.sqlite3 }
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: procurement-redis-credentials, key: REDIS_PASSWORD } } }
+            - { name: OPENAI_API_KEY, valueFrom: { secretKeyRef: { name: procurement-openai-credentials, key: OPENAI_API_KEY } } }
+            - { name: TYPESAFE_API_KEY, valueFrom: { secretKeyRef: { name: procurement-typesafe-credentials, key: TYPESAFE_API_KEY } } }
+          volumeMounts: [{ name: data, mountPath: /data }]
+        - name: worker
+          image: localhost:5000/procurement/worker:latest
+          envFrom: [{ configMapRef: { name: procurement-runtime } }]
+          env:
+            - { name: DATABASE_PATH, value: /data/app.sqlite3 }
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: procurement-redis-credentials, key: REDIS_PASSWORD } } }
+            - { name: OPENAI_API_KEY, valueFrom: { secretKeyRef: { name: procurement-openai-credentials, key: OPENAI_API_KEY } } }
+            - { name: TYPESAFE_API_KEY, valueFrom: { secretKeyRef: { name: procurement-typesafe-credentials, key: TYPESAFE_API_KEY } } }
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes: [{ name: data, persistentVolumeClaim: { claimName: procurement-data } }]

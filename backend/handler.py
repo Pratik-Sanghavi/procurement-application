@@ -5,8 +5,12 @@ from pathlib import Path
 
 from temporalio.client import Client
 
-from backend.app.config import Settings
-from backend.app.workflows import PurchaseOrderProcessingWorkflow
+try:
+    from app.config import Settings
+    from app.workflows import PurchaseOrderProcessingWorkflow
+except ModuleNotFoundError:
+    from backend.app.config import Settings
+    from backend.app.workflows import PurchaseOrderProcessingWorkflow
 
 
 def handle_event(event_type: str, record_id: int, db_path: Path) -> None:
