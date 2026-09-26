@@ -4,5 +4,6 @@ metadata:
   name: procurement-api
   namespace: procurement-ns-1
 spec:
+  type: LoadBalancer
   selector: { app: procurement-backend }
-  ports: [{ port: 8000, targetPort: 8000 }]
+  ports: [{ port: 8000, targetPort: 8000, nodePort: 30002 }]
