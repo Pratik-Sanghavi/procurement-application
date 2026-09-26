@@ -6,4 +6,4 @@ metadata:
 spec:
   type: LoadBalancer
   selector: { app: procurement-frontend }
-  ports: [{ port: 3001, targetPort: 3000 }]
+  ports: [{ port: 3100, targetPort: 3000 }]
