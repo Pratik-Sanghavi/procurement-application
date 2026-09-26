@@ -13,12 +13,12 @@ spec:
     spec:
       initContainers:
         - name: initialize-database
-          image: localhost:5000/procurement/api:latest
+          image: kind-registry:5000/procurement/api:latest
           command: ["sh", "-c", "test -f /data/app.sqlite3 || python init_db.py --db /data/app.sqlite3"]
           volumeMounts: [{ name: data, mountPath: /data }]
       containers:
         - name: api
-          image: localhost:5000/procurement/api:latest
+          image: kind-registry:5000/procurement/api:latest
           ports: [{ containerPort: 8000 }]
           envFrom: [{ configMapRef: { name: procurement-runtime } }]
           env:
@@ -28,7 +28,7 @@ spec:
             - { name: TYPESAFE_API_KEY, valueFrom: { secretKeyRef: { name: procurement-typesafe-credentials, key: TYPESAFE_API_KEY } } }
           volumeMounts: [{ name: data, mountPath: /data }]
         - name: worker
-          image: localhost:5000/procurement/worker:latest
+          image: kind-registry:5000/procurement/worker:latest
           envFrom: [{ configMapRef: { name: procurement-runtime } }]
           env:
             - { name: DATABASE_PATH, value: /data/app.sqlite3 }
