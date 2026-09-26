@@ -1,0 +1,8 @@
+{
+  "message_id": "<spring-2027-update@example.com>",
+  "sender": "Meadow Supply Co. <sales@example.com>",
+  "recipient": "Sample Buyer <buyer@example.com>",
+  "subject": "Re: Spring 2027 acknowledgement - Order 742190",
+  "body": "Hi,\n\nI've attached the latest acknowledgement for your Spring 2027 order. Let me know if you have any questions.\n\nThanks,\nMeadow Supply Co.",
+  "sent_at": "2026-09-14T19:00:00Z"
+}

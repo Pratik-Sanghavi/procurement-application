@@ -1,0 +1,1 @@
+"""Procurement Assistant backend package."""

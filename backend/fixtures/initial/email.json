@@ -1,0 +1,8 @@
+{
+  "message_id": "<spring-2027-initial@example.com>",
+  "sender": "Meadow Supply Co. <sales@example.com>",
+  "recipient": "Sample Buyer <buyer@example.com>",
+  "subject": "Spring 2027 acknowledgement - Order 742190",
+  "body": "Hello,\n\nPlease review the attached acknowledgement for Northfield Nursery's Spring 2027 order. It includes the current quantities, availability, ship dates and prices.\n\nThank you,\nSample Rep\nMeadow Supply Co.",
+  "sent_at": "2026-08-07T15:00:00Z"
+}

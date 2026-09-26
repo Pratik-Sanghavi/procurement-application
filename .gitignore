@@ -1,2 +1,15 @@
 *.zip
 docs/
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+data/
+*.sqlite3
+*.sqlite3-*
