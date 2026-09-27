@@ -37,8 +37,13 @@ export type ChatMessage = {
   id: number;
   sender_type: "human" | "agent" | "system";
   content: string;
+  created_at: string;
 };
-export type ChangeDraft = { id: number; status: string };
+export type ChangeDraft = {
+  id: number;
+  status: string;
+  proposed_snapshot: { line_items: LineItem[] };
+};
 export type ProcessingRun = {
   id: number;
   status: string;

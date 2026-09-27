@@ -1,30 +1,25 @@
 import type { FormEvent } from "react";
-import { Check, MessageSquare, Send } from "lucide-react";
+import { MessageSquare, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import type { ChangeDraft, ChatMessage } from "@/lib/procurement";
+import type { ChatMessage } from "@/lib/procurement";
 
 export function OrderChat({
   messages,
-  drafts,
   message,
   disabled,
   error,
   setMessage,
   onSend,
-  onResolve,
 }: {
   messages: ChatMessage[];
-  drafts: ChangeDraft[];
   message: string;
   disabled: boolean;
   error: string | null;
   setMessage: (value: string) => void;
   onSend: (event: FormEvent<HTMLFormElement>) => void;
-  onResolve: (id: number, action: "accept" | "discard") => void;
 }) {
   return (
     <>
@@ -43,22 +38,6 @@ export function OrderChat({
         ))}
       </div>
       <Separator className="my-4" />
-      {drafts.map((draft) => (
-        <Card key={draft.id} className="mb-3">
-          <CardContent className="p-3">
-            <p className="text-sm font-medium">Proposed change</p>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" onClick={() => onResolve(draft.id, "accept")}>
-                <Check className="mr-1 h-3 w-3" />
-                Accept
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onResolve(draft.id, "discard")}>
-                Discard
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
       <form onSubmit={onSend} className="mt-4">
         <Textarea
           value={message}

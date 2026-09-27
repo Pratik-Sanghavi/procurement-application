@@ -34,7 +34,13 @@ export function useOrderWorkspace() {
       ),
     ]);
     setVersions(v);
-    setMessages(c.flatMap((x: { messages: ChatMessage[] }) => x.messages));
+    setMessages(
+      c
+        .flatMap((conversation: { messages: ChatMessage[] }) => conversation.messages)
+        .sort((left: ChatMessage, right: ChatMessage) =>
+          left.created_at.localeCompare(right.created_at),
+        ),
+    );
     setDrafts(d.filter((x: ChangeDraft) => x.status === "pending"));
     setProcessing(p);
   }

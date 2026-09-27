@@ -1,13 +1,15 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Pencil, Save, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { useOrderWorkspace } from "@/hooks/use-order-workspace";
 import { LineItemsTable } from "@/components/procurement/line-items-table";
 import { OrderChat } from "@/components/procurement/order-chat";
 import { OrderSidebar } from "@/components/procurement/order-sidebar";
 import { ProcessingCard } from "@/components/procurement/processing-card";
+import { PendingChangeReview } from "@/components/procurement/pending-change-review";
 import { VersionPanel } from "@/components/procurement/version-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ export default function Home() {
   const [editorValue, setEditorValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const notifiedDraftIds = useRef(new Set<number>());
 
   const selectedVersion = useMemo(
     () =>
@@ -68,6 +71,15 @@ export default function Home() {
       .then((data) => setChanges(data.changes));
   }, [selectedId, selectedVersionId, versions]);
 
+  useEffect(() => {
+    for (const draft of drafts) {
+      if (notifiedDraftIds.current.has(draft.id)) continue;
+      notifiedDraftIds.current.add(draft.id);
+      toast.success("Change proposal ready", {
+        description: "Review it below, then accept or discard the update.",
+      });
+    }
+  }, [drafts]);
   function selectOrder(id: number) {
     setSelectedId(id);
     setSelectedVersionId(null);
@@ -125,7 +137,12 @@ export default function Home() {
       `${api}/orders/${selectedId}/change-drafts/${draftId}/${action}`,
       { method: "POST" },
     );
-    if (response.ok) await loadOrder(selectedId);
+    if (response.ok) {
+      await loadOrder(selectedId);
+      toast.success(action === "accept" ? "Change accepted" : "Change discarded");
+      return;
+    }
+    toast.error("Could not update the change proposal.");
   }
 
   return (
@@ -231,6 +248,11 @@ export default function Home() {
                   </CardContent>
                 </Card>
               )}
+              <PendingChangeReview
+                drafts={drafts}
+                currentItems={selectedVersion.line_items}
+                onResolve={resolveDraft}
+              />
               <LineItemsTable items={selectedVersion.line_items} />
             </>
           ) : (
@@ -245,13 +267,11 @@ export default function Home() {
           <ProcessingCard run={processing[0]} />
           <OrderChat
             messages={messages}
-            drafts={drafts}
             message={message}
             disabled={!selectedId}
             error={chatError}
             setMessage={setMessage}
             onSend={sendMessage}
-            onResolve={resolveDraft}
           />
         </aside>
       </div>
