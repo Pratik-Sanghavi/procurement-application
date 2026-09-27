@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -75,6 +75,24 @@ class OrderSnapshotChunk(BaseModel):
     shipping: ShippingData | None = None
     financial_summary: FinancialSummaryData | None = None
     line_items: list[LineItemData] = Field(default_factory=list)
+
+class OrderFieldChange(BaseModel):
+    section: Literal["supplier", "details", "shipping", "financial_summary"]
+    field: str = Field(min_length=1)
+    value: str | None = None
+
+
+class LineItemFieldChange(BaseModel):
+    line_number: int = Field(ge=1)
+    field: str = Field(min_length=1)
+    value: str | None = None
+
+
+class OrderChangePlan(BaseModel):
+    """A compact, explicit patch proposed from a chat request."""
+
+    order_updates: list[OrderFieldChange] = Field(default_factory=list)
+    line_item_updates: list[LineItemFieldChange] = Field(default_factory=list)
 
 class OrderVersionResponse(OrderSnapshotInput):
     model_config = ConfigDict(from_attributes=True)

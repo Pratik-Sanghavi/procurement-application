@@ -12,7 +12,7 @@ from .database import session_factory
 from .events import publish_order_event
 from .jev import JevClient
 from .models import AgentChangeDraft, AuditEvent, ChatConversation, ChatMessage, OrderVersion, PurchaseOrder
-from .schemas import OrderSnapshotInput
+from .schemas import LineItemData, OrderChangePlan, OrderSnapshotInput
 from .services.orders import version_response
 
 
@@ -108,6 +108,29 @@ def answer_order_question(message_id: int, database_path: str) -> dict[str, int]
     return {"response_message_id": result["response_message_id"]}
 
 
+def _apply_change_plan(snapshot: OrderSnapshotInput, plan: OrderChangePlan) -> OrderSnapshotInput:
+    """Apply only whitelisted, explicit model-proposed updates to a snapshot."""
+    payload = snapshot.model_dump(mode="json")
+    for update in plan.order_updates:
+        allowed_fields = getattr(snapshot, update.section).model_fields
+        if update.field not in allowed_fields:
+            raise ValueError(f"Unsupported order field in change proposal: {update.section}.{update.field}")
+        payload[update.section][update.field] = update.value
+
+    line_items = {item["line_number"]: item for item in payload["line_items"]}
+    for update in plan.line_item_updates:
+        item = line_items.get(update.line_number)
+        if item is None:
+            raise ValueError(f"Change proposal references unknown line item {update.line_number}")
+        if update.field not in LineItemData.model_fields or update.field in {"line_number", "description"}:
+            raise ValueError(f"Unsupported line-item field in change proposal: {update.field}")
+        item[update.field] = update.value
+
+    if not plan.order_updates and not plan.line_item_updates:
+        raise ValueError("The requested change did not identify a supported order field")
+    return OrderSnapshotInput.model_validate(payload)
+
+
 @activity.defn
 def propose_order_change(message_id: int, database_path: str) -> dict[str, int]:
     settings = _settings()
@@ -121,55 +144,32 @@ def propose_order_change(message_id: int, database_path: str) -> dict[str, int]:
             existing_draft = session.scalar(select(AgentChangeDraft).where(AgentChangeDraft.chat_message_id == existing_response.id))
             if existing_draft is not None:
                 return {"response_message_id": existing_response.id, "draft_id": existing_draft.id}
-        current_snapshot = version_response(version).model_dump_json()
-        completion = OpenAI(api_key=settings.openai_api_key).beta.chat.completions.parse(
-            model=settings.openai_extraction_model,
+
+        current_snapshot = OrderSnapshotInput.model_validate(version_response(version).model_dump(mode="json"))
+        completion = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
+            model=settings.openai_change_model,
+            max_completion_tokens=8_192,
+            reasoning_effort="low",
+            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "Return a complete updated purchase-order snapshot. Apply only the explicitly requested change; preserve all other current values."},
-                {"role": "user", "content": f"Current snapshot:\n{current_snapshot}\n\nRequested change: {message.content}"},
+                {"role": "system", "content": "Translate the user's request into a compact JSON patch for the supplied purchase order. Return exactly {\"order_updates\": [], \"line_item_updates\": []}. Each order update is {\"section\": one of supplier/details/shipping/financial_summary, \"field\": field name, \"value\": string or null}. Each line-item update is {\"line_number\": integer, \"field\": one of size/ordered_quantity/confirmed_quantity/catalog_price/customer_price/variety_license_fee/extended_line_amount/item_notes/scheduled_shipping_date_or_week, \"value\": string or null}. Use line_number only from the supplied snapshot. Propose only explicitly requested changes. Do not return a complete snapshot, explanations, or unrequested updates."},
+                {"role": "user", "content": f"Current snapshot:\n{current_snapshot.model_dump_json()}\n\nRequested change: {message.content}"},
             ],
-            response_format=OrderSnapshotInput,
         )
-        proposal = completion.choices[0].message.parsed
-        if proposal is None:
-            raise ValueError("OpenAI did not return a structured change proposal")
-        if proposal.supplier_order_number != order.supplier_order_number:
-            raise ValueError("Change proposal cannot alter the supplier order number")
-        response = ChatMessage(
-            conversation_id=conversation.id,
-            reply_to_message_id=message.id,
-            sender_type="agent",
-            message_type="change_proposal",
-            content="I prepared a proposed order update. Review the highlighted changes and accept or discard it.",
-            intent="change_request",
-        )
+        content = completion.choices[0].message.content
+        if not content:
+            raise ValueError("OpenAI did not return a change patch")
+        proposal = _apply_change_plan(current_snapshot, OrderChangePlan.model_validate_json(content))
+        response = ChatMessage(conversation_id=conversation.id, reply_to_message_id=message.id, sender_type="agent", message_type="change_proposal", content="I prepared a proposed order update. Review the highlighted changes and accept or discard it.", intent="change_request")
         session.add(response)
         session.flush()
-        draft = AgentChangeDraft(
-            order_id=order.id,
-            chat_message_id=response.id,
-            base_version_id=version.id,
-            proposed_snapshot_json=proposal.model_dump_json(),
-        )
+        draft = AgentChangeDraft(order_id=order.id, chat_message_id=response.id, base_version_id=version.id, proposed_snapshot_json=proposal.model_dump_json())
         session.add(draft)
         session.flush()
-        session.add(
-            AuditEvent(
-                order_id=order.id,
-                chat_message_id=response.id,
-                agent_change_draft_id=draft.id,
-                actor_type="agent",
-                action="change_draft.proposed",
-                change_summary_json=json.dumps({"base_version_id": version.id}),
-            )
-        )
+        session.add(AuditEvent(order_id=order.id, chat_message_id=response.id, agent_change_draft_id=draft.id, actor_type="agent", action="change_draft.proposed", change_summary_json=json.dumps({"base_version_id": version.id})))
         result = {"order_id": order.id, "response_message_id": response.id, "draft_id": draft.id}
-    publish_order_event(
-        result["order_id"],
-        {"type": "change_draft.created", "message_id": result["response_message_id"], "draft_id": result["draft_id"]},
-    )
+    publish_order_event(result["order_id"], {"type": "change_draft.created", "message_id": result["response_message_id"], "draft_id": result["draft_id"]})
     return {"response_message_id": result["response_message_id"], "draft_id": result["draft_id"]}
-
 
 @activity.defn
 def respond_to_unsupported_request(message_id: int, database_path: str) -> dict[str, int]:
