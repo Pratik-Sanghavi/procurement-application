@@ -62,7 +62,6 @@ class PurchaseOrderProcessingWorkflow:
                 )
             snapshot = await workflow.execute_activity(
                 stitch_order_snapshot,
-        validate_order_snapshot,
                 args=[partial_snapshots],
                 start_to_close_timeout=timedelta(minutes=1),
             )
