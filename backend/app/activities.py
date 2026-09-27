@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -153,7 +154,42 @@ def extract_order_snapshot_chunk(pdf_text: str) -> dict:
     content = completion.choices[0].message.content
     if not content:
         raise ValueError("OpenAI did not return a JSON purchase-order section")
-    return OrderSnapshotChunk.model_validate_json(content).model_dump(mode="json")
+    raw = json.loads(content)
+    if not isinstance(raw, dict):
+        raise ValueError("OpenAI returned a non-object purchase-order section")
+
+    normalized: dict = {}
+    supplier_order_number = raw.get("supplier_order_number")
+    if isinstance(supplier_order_number, str) and supplier_order_number.strip():
+        normalized["supplier_order_number"] = supplier_order_number.strip()
+    for field_name, model in (
+        ("supplier", SupplierData),
+        ("details", OrderDetailsData),
+        ("shipping", ShippingData),
+        ("financial_summary", FinancialSummaryData),
+    ):
+        value = raw.get(field_name)
+        if not isinstance(value, dict):
+            continue
+        try:
+            normalized[field_name] = model.model_validate(value)
+        except ValueError:
+            continue
+
+    line_items: list[LineItemData] = []
+    values = raw.get("line_items", [])
+    for value in values if isinstance(values, list) else []:
+        if not isinstance(value, dict):
+            continue
+        item = dict(value)
+        if isinstance(item.get("item_notes"), list):
+            item["item_notes"] = "\n".join(str(note) for note in item["item_notes"])
+        try:
+            line_items.append(LineItemData.model_validate(item))
+        except ValueError:
+            continue
+    normalized["line_items"] = line_items
+    return OrderSnapshotChunk.model_validate(normalized).model_dump(mode="json")
 
 
 def _merge_fields(parts: list[OrderSnapshotChunk], key: str, model: type) -> dict:
