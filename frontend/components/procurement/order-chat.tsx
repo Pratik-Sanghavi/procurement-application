@@ -38,7 +38,7 @@ export function OrderChat({
         ))}
       </div>
       <Separator className="my-4" />
-      <form onSubmit={onSend} className="mt-4">
+      <form onSubmit={onSend} className="sticky bottom-0 z-10 mt-4 border-t bg-white/95 py-4 backdrop-blur">
         <Textarea
           value={message}
           onChange={(event) => setMessage(event.target.value)}
