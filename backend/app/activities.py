@@ -13,7 +13,7 @@ from .config import Settings
 from .database import session_factory
 from .events import publish_order_event
 from .models import Attachment, Email, OrderVersion, ProcessingRun, PurchaseOrder
-from .schemas import OrderSnapshotInput
+from .schemas import FinancialSummaryData, LineItemData, OrderDetailsData, OrderSnapshotChunk, OrderSnapshotInput, ShippingData, SupplierData
 from .services.orders import append_version
 
 
@@ -88,6 +88,98 @@ def extract_order_snapshot(pdf_text: str) -> dict:
         raise ValueError("OpenAI did not return a structured purchase order")
     return parsed.model_dump(mode="json")
 
+
+@activity.defn
+def extract_pdf_text_chunks(attachment_id: int, database_path: str) -> list[str]:
+    """Extract PDF pages into bounded text sections for reliable structured output."""
+    factory = session_factory(Path(database_path))
+    with factory() as session:
+        attachment = session.get(Attachment, attachment_id)
+        if attachment is None:
+            raise ValueError(f"Attachment {attachment_id} does not exist")
+        reader = PdfReader(io.BytesIO(attachment.content))
+        pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_length = 0
+    for page_number, page_text in enumerate(pages, start=1):
+        if not page_text.strip():
+            continue
+        page = f"--- Page {page_number} ---\n{page_text.strip()}"
+        if current and current_length + len(page) > 12_000:
+            chunks.append("\n\n".join(current))
+            current, current_length = [], 0
+        current.append(page)
+        current_length += len(page)
+    if current:
+        chunks.append("\n\n".join(current))
+    if not chunks:
+        raise ValueError("PDF has no extractable text; OCR is not enabled")
+    return chunks
+
+
+@activity.defn
+def extract_order_snapshot_chunk(pdf_text: str) -> dict:
+    settings = _settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required to process purchase-order PDFs")
+    completion = OpenAI(api_key=settings.openai_api_key).beta.chat.completions.parse(
+        model=settings.openai_extraction_model,
+        max_completion_tokens=8_192,
+        reasoning_effort="low",
+        messages=[
+            {"role": "system", "content": "Extract purchase-order acknowledgement facts from this document section only. Return every line item shown in this section. Do not invent missing values or repeat line items from other pages. Document-level fields may be null; a later activity stitches all sections."},
+            {"role": "user", "content": pdf_text},
+        ],
+        response_format=OrderSnapshotChunk,
+    )
+    parsed = completion.choices[0].message.parsed
+    if parsed is None:
+        raise ValueError("OpenAI did not return a structured purchase-order section")
+    return parsed.model_dump(mode="json")
+
+
+def _merge_fields(parts: list[OrderSnapshotChunk], key: str, model: type) -> dict:
+    merged: dict = {}
+    for field_name in model.model_fields:
+        for part in parts:
+            nested = getattr(part, key)
+            value = getattr(nested, field_name) if nested is not None else None
+            if value is not None and value != "":
+                merged[field_name] = value
+                break
+    return merged
+
+
+@activity.defn
+def stitch_order_snapshot(chunk_data: list[dict]) -> dict:
+    """Merge partial extractions deterministically and validate one complete snapshot."""
+    parts = [OrderSnapshotChunk.model_validate(chunk) for chunk in chunk_data]
+    supplier_order_number = next((part.supplier_order_number for part in parts if part.supplier_order_number), None)
+    supplier_values = _merge_fields(parts, "supplier", SupplierData)
+    if not supplier_order_number or not supplier_values.get("name"):
+        raise ValueError("Acknowledgement sections did not provide supplier order number and supplier name")
+    items_by_number: dict[int, LineItemData] = {}
+    for part in parts:
+        for item in part.line_items:
+            existing = items_by_number.get(item.line_number)
+            if existing is None:
+                items_by_number[item.line_number] = item
+                continue
+            combined = existing.model_dump()
+            for field_name, value in item.model_dump().items():
+                if field_name != "line_number" and value is not None and combined.get(field_name) is None:
+                    combined[field_name] = value
+            items_by_number[item.line_number] = LineItemData.model_validate(combined)
+    snapshot = OrderSnapshotInput(
+        supplier_order_number=supplier_order_number,
+        supplier=SupplierData(**supplier_values),
+        details=OrderDetailsData(**_merge_fields(parts, "details", OrderDetailsData)),
+        shipping=ShippingData(**_merge_fields(parts, "shipping", ShippingData)),
+        financial_summary=FinancialSummaryData(**_merge_fields(parts, "financial_summary", FinancialSummaryData)),
+        line_items=[items_by_number[number] for number in sorted(items_by_number)],
+    )
+    return snapshot.model_dump(mode="json")
 
 @activity.defn
 def persist_supplier_version(email_id: int, processing_run_id: int, snapshot_data: dict, database_path: str) -> dict[str, int]:

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
@@ -5,11 +6,12 @@ from temporalio import workflow
 with workflow.unsafe.imports_passed_through():
     from .activities import (
         create_processing_run,
-        extract_order_snapshot,
-        extract_pdf_text,
+        extract_order_snapshot_chunk,
+        extract_pdf_text_chunks,
         mark_processing_failed,
         persist_supplier_version,
         set_processing_stage,
+        stitch_order_snapshot,
     )
     from .chat_activities import answer_order_question, classify_chat_intent, propose_order_change, respond_to_unsupported_request
 
@@ -24,20 +26,43 @@ class PurchaseOrderProcessingWorkflow:
             start_to_close_timeout=timedelta(seconds=30),
         )
         try:
-            pdf_text = await workflow.execute_activity(
-                extract_pdf_text,
+            chunks = await workflow.execute_activity(
+                extract_pdf_text_chunks,
                 args=[run["attachment_id"], database_path],
                 start_to_close_timeout=timedelta(minutes=2),
             )
             await workflow.execute_activity(
                 set_processing_stage,
-                args=[run["processing_run_id"], "pdf_text_extracted", database_path],
+                args=[run["processing_run_id"], "pdf_text_chunked", database_path],
                 start_to_close_timeout=timedelta(seconds=30),
             )
+            partial_snapshots: list[dict] = []
+            batch_size = 4
+            for batch_start in range(0, len(chunks), batch_size):
+                batch = chunks[batch_start : batch_start + batch_size]
+                partial_snapshots.extend(
+                    await asyncio.gather(
+                        *[
+                            workflow.execute_activity(
+                                extract_order_snapshot_chunk,
+                                args=[chunk],
+                                start_to_close_timeout=timedelta(minutes=3),
+                            )
+                            for chunk in batch
+                        ]
+                    )
+                )
+                first_section = batch_start + 1
+                last_section = batch_start + len(batch)
+                await workflow.execute_activity(
+                    set_processing_stage,
+                    args=[run["processing_run_id"], f"sections_{first_section}_{last_section}_extracted", database_path],
+                    start_to_close_timeout=timedelta(seconds=30),
+                )
             snapshot = await workflow.execute_activity(
-                extract_order_snapshot,
-                args=[pdf_text],
-                start_to_close_timeout=timedelta(minutes=5),
+                stitch_order_snapshot,
+                args=[partial_snapshots],
+                start_to_close_timeout=timedelta(minutes=1),
             )
             await workflow.execute_activity(
                 set_processing_stage,

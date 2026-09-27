@@ -57,6 +57,15 @@ class OrderSnapshotInput(BaseModel):
     financial_summary: FinancialSummaryData = Field(default_factory=FinancialSummaryData)
     line_items: list[LineItemData] = Field(default_factory=list)
 
+class OrderSnapshotChunk(BaseModel):
+    """A partial extraction from a bounded range of acknowledgement pages."""
+
+    supplier_order_number: str | None = Field(default=None, max_length=128)
+    supplier: SupplierData | None = None
+    details: OrderDetailsData | None = None
+    shipping: ShippingData | None = None
+    financial_summary: FinancialSummaryData | None = None
+    line_items: list[LineItemData] = Field(default_factory=list)
 
 class OrderVersionResponse(OrderSnapshotInput):
     model_config = ConfigDict(from_attributes=True)

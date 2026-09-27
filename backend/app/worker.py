@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from .activities import create_processing_run, extract_order_snapshot, extract_pdf_text, mark_processing_failed, persist_supplier_version, set_processing_stage
+from .activities import create_processing_run, extract_order_snapshot_chunk, extract_pdf_text_chunks, mark_processing_failed, persist_supplier_version, set_processing_stage, stitch_order_snapshot
 from .chat_activities import answer_order_question, classify_chat_intent, propose_order_change, respond_to_unsupported_request
 from .config import settings
 from .workflows import ChatRoutingWorkflow, OrderChangeRequestWorkflow, OrderQuestionWorkflow, PurchaseOrderProcessingWorkflow
@@ -22,8 +22,9 @@ async def run_worker() -> None:
         ),
         activities=[
             create_processing_run,
-            extract_pdf_text,
-            extract_order_snapshot,
+            extract_pdf_text_chunks,
+            extract_order_snapshot_chunk,
+            stitch_order_snapshot,
             set_processing_stage,
             persist_supplier_version,
             mark_processing_failed,
