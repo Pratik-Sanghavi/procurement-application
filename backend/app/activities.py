@@ -123,23 +123,37 @@ def extract_pdf_text_chunks(attachment_id: int, database_path: str) -> list[str]
 
 @activity.defn
 def extract_order_snapshot_chunk(pdf_text: str) -> dict:
+    """Extract one permissive partial snapshot; `{}` is valid for non-data sections."""
     settings = _settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required to process purchase-order PDFs")
-    completion = OpenAI(api_key=settings.openai_api_key).beta.chat.completions.parse(
-        model=settings.openai_extraction_model,
-        max_completion_tokens=32_768,
-        reasoning_effort="none",
+    completion = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
+        model=settings.openai_chunk_extraction_model,
+        max_tokens=4_096,
+        temperature=0,
         messages=[
-            {"role": "system", "content": "Extract purchase-order acknowledgement facts from this document section only. Return every line item shown in this section. Do not invent missing values or repeat line items from other pages. Document-level fields may be null; a later activity stitches all sections."},
+            {
+                "role": "system",
+                "content": (
+                    "Extract facts from this one purchase-order acknowledgement section. "
+                    "Return only a JSON object. Omit fields that are not explicitly present. "
+                    "If this section has no useful order facts, return {}. "
+                    "Allowed top-level fields are supplier_order_number, supplier, details, shipping, "
+                    "financial_summary, and line_items. supplier requires name when present. "
+                    "Each line item requires line_number and description; optional item fields are size, "
+                    "ordered_quantity, confirmed_quantity, catalog_price, customer_price, "
+                    "variety_license_fee, extended_line_amount, item_notes, and scheduled_shipping_date_or_week. "
+                    "Do not invent facts and do not repeat rows from other sections."
+                ),
+            },
             {"role": "user", "content": pdf_text},
         ],
-        response_format=OrderSnapshotChunk,
+        response_format={"type": "json_object"},
     )
-    parsed = completion.choices[0].message.parsed
-    if parsed is None:
-        raise ValueError("OpenAI did not return a structured purchase-order section")
-    return parsed.model_dump(mode="json")
+    content = completion.choices[0].message.content
+    if not content:
+        raise ValueError("OpenAI did not return a JSON purchase-order section")
+    return OrderSnapshotChunk.model_validate_json(content).model_dump(mode="json")
 
 
 def _merge_fields(parts: list[OrderSnapshotChunk], key: str, model: type) -> dict:
