@@ -144,24 +144,24 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-muted/30 text-foreground">
-      <header className="flex h-16 items-center justify-between border-b bg-background px-6">
-        <div className="flex items-center gap-3">
-          <div className="rounded-md bg-primary p-2 text-primary-foreground">
+    <main className="min-h-screen bg-slate-50 text-foreground">
+      <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-7">
+        <div className="flex items-center gap-3.5">
+          <div className="rounded-xl bg-slate-900 p-2.5 text-white shadow-sm">
             <FileText className="h-4 w-4" />
           </div>
           <div>
-            <h1 className="font-semibold">Procurement Assistant</h1>
-            <p className="text-xs text-muted-foreground">
+            <h1 className="text-[15px] font-semibold tracking-tight">Procurement Assistant</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Purchase-order acknowledgements
             </p>
           </div>
         </div>
-        <Badge variant="secondary">Live workflow status</Badge>
+        <Badge className="border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50">Live workflow status</Badge>
       </header>
-      <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_340px]">
-        <aside className="border-r bg-background p-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <aside className="border-r border-slate-200 bg-white/80 p-5">
+          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             Orders
           </p>
           {loading ? (
@@ -187,7 +187,7 @@ export default function Home() {
             </div>
           )}
         </aside>
-        <section className="space-y-5 p-6">
+        <section className="space-y-6 p-7 lg:p-8">
           {selectedVersion ? (
             <>
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -211,7 +211,7 @@ export default function Home() {
                   </Button>
                   <Card>
                     <CardContent className="p-3">
-                      <p className="text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         Grand total
                       </p>
                       <p className="font-semibold">
@@ -343,13 +343,15 @@ export default function Home() {
               </Card>
             </>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Select an order to review its acknowledgement.
+            <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 text-center">
+              <FileText className="mb-4 h-9 w-9 text-slate-300" />
+              <h2 className="text-base font-semibold text-slate-800">Your order workspace is ready</h2>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">Send a supplier acknowledgement through the email simulator to create your first order and see its processing timeline here.</p>
             </div>
           )}
         </section>
-        <aside className="border-l bg-background p-4">
-          <Card className="mb-4">
+        <aside className="border-l border-slate-200 bg-white/80 p-5">
+          <Card className="mb-5 border-slate-200 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Processing</CardTitle>
             </CardHeader>
@@ -381,7 +383,7 @@ export default function Home() {
               )}
             </CardContent>
           </Card>
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-4 flex items-center gap-2 text-slate-800">
             <MessageSquare className="h-4 w-4" />
             <h2 className="font-semibold">Order chat</h2>
           </div>
