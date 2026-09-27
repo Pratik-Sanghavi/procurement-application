@@ -58,19 +58,6 @@ export default function Home() {
     [versions, selectedVersionId],
   );
 
-  useEffect(() => {
-    if (!selectedId) return;
-    const socket = new WebSocket(`${wsBase}/ws/orders/${selectedId}`);
-    const heartbeat = window.setInterval(
-      () => socket.readyState === WebSocket.OPEN && socket.send("ping"),
-      25000,
-    );
-    socket.onmessage = () => void loadOrder(selectedId);
-    return () => {
-      window.clearInterval(heartbeat);
-      socket.close();
-    };
-  }, [selectedId]);
 
   useEffect(() => {
     if (!selectedId || !selectedVersionId || versions.length < 2) {

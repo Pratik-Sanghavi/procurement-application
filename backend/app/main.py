@@ -35,13 +35,21 @@ from .workflows import ChatRoutingWorkflow
 class OrderConnections:
     def __init__(self) -> None:
         self._connections: dict[int, set[WebSocket]] = {}
+        self._feed_connections: set[WebSocket] = set()
 
     async def connect(self, order_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
         self._connections.setdefault(order_id, set()).add(websocket)
 
+    async def connect_feed(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._feed_connections.add(websocket)
+
     def disconnect(self, order_id: int, websocket: WebSocket) -> None:
         self._connections.get(order_id, set()).discard(websocket)
+
+    def disconnect_feed(self, websocket: WebSocket) -> None:
+        self._feed_connections.discard(websocket)
 
     async def publish(self, order_id: int, event: dict) -> None:
         for websocket in list(self._connections.get(order_id, set())):
@@ -49,6 +57,12 @@ class OrderConnections:
                 await websocket.send_json(event)
             except (RuntimeError, WebSocketDisconnect):
                 self.disconnect(order_id, websocket)
+        feed_event = {"order_id": order_id, **event}
+        for websocket in list(self._feed_connections):
+            try:
+                await websocket.send_json(feed_event)
+            except (RuntimeError, WebSocketDisconnect):
+                self.disconnect_feed(websocket)
 
 
 def chat_message_response(message: ChatMessage) -> ChatMessageResponse:
@@ -284,6 +298,14 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         await emit_order_event(order_id, {"type": "change_draft.discarded", "draft_id": draft.id})
         return response
 
+    @app.websocket("/ws/orders")
+    async def order_feed_events(websocket: WebSocket) -> None:
+        await connections.connect_feed(websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            connections.disconnect_feed(websocket)
     @app.websocket("/ws/orders/{order_id}")
     async def order_events(order_id: int, websocket: WebSocket) -> None:
         await connections.connect(order_id, websocket)

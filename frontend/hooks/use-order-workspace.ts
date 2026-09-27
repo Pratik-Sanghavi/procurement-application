@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   apiBaseUrl,
   websocketBaseUrl,
@@ -38,15 +38,31 @@ export function useOrderWorkspace() {
     setDrafts(d.filter((x: ChangeDraft) => x.status === "pending"));
     setProcessing(p);
   }
-  useEffect(() => {
-    fetch(`${apiBaseUrl}/orders`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => {
-        setOrders(data);
-        setSelectedId(data[0]?.id ?? null);
-      })
-      .finally(() => setLoading(false));
+  const loadOrders = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/orders`);
+      const data: OrderSummary[] = response.ok ? await response.json() : [];
+      setOrders(data);
+      setSelectedId((current) => current ?? data[0]?.id ?? null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
+  useEffect(() => {
+    const socket = new WebSocket(`${websocketBaseUrl}/ws/orders`);
+    const heartbeat = window.setInterval(
+      () => socket.readyState === WebSocket.OPEN && socket.send("ping"),
+      25_000,
+    );
+    socket.onmessage = () => void loadOrders();
+    return () => {
+      window.clearInterval(heartbeat);
+      socket.close();
+    };
+  }, [loadOrders]);
   useEffect(() => {
     if (selectedId) void loadOrder(selectedId);
   }, [selectedId]);
