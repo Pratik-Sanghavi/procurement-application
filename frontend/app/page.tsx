@@ -48,6 +48,7 @@ export default function Home() {
   const [editing, setEditing] = useState(false);
   const [editorValue, setEditorValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const selectedVersion = useMemo(
     () =>
@@ -113,11 +114,14 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: message }),
     });
-    if (response.ok) {
-      const createdMessage = await response.json();
-      setMessages((items) => [...items, createdMessage]);
-      setMessage("");
+    if (!response.ok) {
+      setChatError("Message could not be sent. Please try again.");
+      return;
     }
+    const createdMessage = await response.json();
+    setMessages((items) => [...items, createdMessage]);
+    setMessage("");
+    setChatError(null);
   }
 
   async function resolveDraft(draftId: number, action: "accept" | "discard") {
@@ -414,12 +418,14 @@ export default function Home() {
               placeholder="Ask about this order or request a change…"
             />
             <Button
+              type="submit"
               className="mt-2 w-full"
               disabled={!selectedId || !message.trim()}
             >
               <Send className="mr-2 h-4 w-4" />
               Send
             </Button>
+            {chatError && <p className="mt-2 text-sm text-destructive">{chatError}</p>}
           </form>
         </aside>
       </div>
