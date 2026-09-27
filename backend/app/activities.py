@@ -67,6 +67,8 @@ def extract_order_snapshot(pdf_text: str) -> dict:
     client = OpenAI(api_key=settings.openai_api_key)
     completion = client.beta.chat.completions.parse(
         model=settings.openai_extraction_model,
+        max_completion_tokens=32_768,
+        reasoning_effort="low",
         messages=[
             {
                 "role": "system",

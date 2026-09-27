@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     redis_password: SecretStr | None = None
 
     openai_api_key: str | None = None
-    openai_extraction_model: str = "gpt-5-mini"
+    openai_extraction_model: str = "gpt-5.1"
     typesafe_api_key: str | None = Field(default=None, validation_alias=AliasChoices("TYPESAFE_API_KEY", "JEV_API_KEY"))
     typesafe_model: str = "jev-latest"
     typesafe_timeout_seconds: float = 10.0
