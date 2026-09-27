@@ -1,4 +1,4 @@
-import { ChevronRight, GitCompareArrows } from "lucide-react";
+import { Bot, ChevronRight, GitCompareArrows, UserRound } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { OrderVersion, VersionChange } from "@/lib/procurement";
 
@@ -26,7 +26,22 @@ export function VersionPanel({
               onClick={() => onSelect(version.id)}
               className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm ${activeVersionId === version.id ? "bg-muted font-medium" : "hover:bg-muted/60"}`}
             >
-              <span>Version {version.version_number}</span>
+              <span className="flex items-center gap-2">
+                {version.created_by_type === "human" ? (
+                  <UserRound
+                    className="h-4 w-4 text-sky-700"
+                    aria-label="Human edit"
+                    title="Human edit"
+                  />
+                ) : (
+                  <Bot
+                    className="h-4 w-4 text-violet-700"
+                    aria-label="Agent edit"
+                    title="Agent edit"
+                  />
+                )}
+                Version {version.version_number}
+              </span>
               <ChevronRight className="h-4 w-4" />
             </button>
           ))}
