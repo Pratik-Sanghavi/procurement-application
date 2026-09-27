@@ -302,9 +302,10 @@ export default function Home() {
                 <CardHeader>
                   <CardTitle className="text-base">Line items</CardTitle>
                 </CardHeader>
-                <CardContent className="overflow-x-auto p-0">
-                  <table className="w-full text-sm">
-                    <thead className="border-y bg-muted/40 text-left text-xs text-muted-foreground">
+                <CardContent className="p-0">
+                  <div className="min-h-[18rem] max-h-[calc(100vh-20rem)] overflow-auto">
+                    <table className="min-w-[760px] w-full text-sm">
+                    <thead className="sticky top-0 z-10 border-y bg-muted text-left text-xs text-muted-foreground shadow-sm">
                       <tr>
                         <th className="p-3">Description</th>
                         <th className="p-3">Confirmed</th>
@@ -329,6 +330,7 @@ export default function Home() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </CardContent>
               </Card>
             </>

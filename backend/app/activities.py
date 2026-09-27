@@ -144,7 +144,7 @@ def extract_order_snapshot_chunk(pdf_text: str) -> dict:
                     "Each line item requires line_number and description; optional item fields are size, "
                     "ordered_quantity, confirmed_quantity, catalog_price, customer_price, "
                     "variety_license_fee, extended_line_amount, item_notes, and scheduled_shipping_date_or_week. "
-                    "Do not invent facts and do not repeat rows from other sections."
+                    "Map printed price headers exactly: Cat. Price to catalog_price, Your Price to customer_price, Var. Lic. Fee to variety_license_fee, and Ext. Price to extended_line_amount. Do not infer price meaning from extraction-text order. Do not invent facts and do not repeat rows from other sections."
                 ),
             },
             {"role": "user", "content": pdf_text},
