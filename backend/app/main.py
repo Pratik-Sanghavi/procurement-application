@@ -110,7 +110,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     app = FastAPI(title="Procurement Assistant API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=["http://localhost:3100", "http://127.0.0.1:3100"],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
