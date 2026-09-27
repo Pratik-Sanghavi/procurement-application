@@ -99,20 +99,23 @@ def extract_pdf_text_chunks(attachment_id: int, database_path: str) -> list[str]
             raise ValueError(f"Attachment {attachment_id} does not exist")
         reader = PdfReader(io.BytesIO(attachment.content))
         pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
+    max_chunk_characters = 2_000
     chunks: list[str] = []
-    current: list[str] = []
-    current_length = 0
     for page_number, page_text in enumerate(pages, start=1):
-        if not page_text.strip():
+        text = page_text.strip()
+        if not text:
             continue
-        page = f"--- Page {page_number} ---\n{page_text.strip()}"
-        if current and current_length + len(page) > 12_000:
-            chunks.append("\n\n".join(current))
-            current, current_length = [], 0
-        current.append(page)
-        current_length += len(page)
-    if current:
-        chunks.append("\n\n".join(current))
+        page_prefix = f"--- Page {page_number} ---\n"
+        while text:
+            available = max_chunk_characters - len(page_prefix)
+            if len(text) <= available:
+                chunks.append(page_prefix + text)
+                break
+            split_at = text.rfind("\n", 0, available)
+            if split_at <= available // 2:
+                split_at = available
+            chunks.append(page_prefix + text[:split_at].strip())
+            text = text[split_at:].lstrip()
     if not chunks:
         raise ValueError("PDF has no extractable text; OCR is not enabled")
     return chunks
@@ -125,8 +128,8 @@ def extract_order_snapshot_chunk(pdf_text: str) -> dict:
         raise RuntimeError("OPENAI_API_KEY is required to process purchase-order PDFs")
     completion = OpenAI(api_key=settings.openai_api_key).beta.chat.completions.parse(
         model=settings.openai_extraction_model,
-        max_completion_tokens=8_192,
-        reasoning_effort="low",
+        max_completion_tokens=32_768,
+        reasoning_effort="none",
         messages=[
             {"role": "system", "content": "Extract purchase-order acknowledgement facts from this document section only. Return every line item shown in this section. Do not invent missing values or repeat line items from other pages. Document-level fields may be null; a later activity stitches all sections."},
             {"role": "user", "content": pdf_text},
