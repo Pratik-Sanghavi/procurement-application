@@ -39,6 +39,7 @@ export default function Home() {
     null,
   );
   const [changes, setChanges] = useState<Change[]>([]);
+  const [baseVersionId, setBaseVersionId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
   const [editorValue, setEditorValue] = useState("");
@@ -56,20 +57,41 @@ export default function Home() {
     [versions, selectedVersionId],
   );
 
+  useEffect(() => {
+    if (!selectedVersion) {
+      setBaseVersionId(null);
+      return;
+    }
+    setBaseVersionId((current) => {
+      if (
+        current !== null &&
+        current !== selectedVersion.id &&
+        versions.some((version) => version.id === current)
+      )
+        return current;
+      return (
+        [...versions]
+          .filter(
+            (version) =>
+              version.version_number < selectedVersion.version_number,
+          )
+          .sort((left, right) => right.version_number - left.version_number)[0]
+          ?.id ?? null
+      );
+    });
+  }, [selectedVersion, versions]);
 
   useEffect(() => {
-    if (!selectedId || !selectedVersionId || versions.length < 2) {
+    if (!selectedId || !selectedVersion || !baseVersionId) {
       setChanges([]);
       return;
     }
-    const base = versions.find((version) => version.id !== selectedVersionId);
-    if (!base) return;
     fetch(
-      `${api}/orders/${selectedId}/versions/${selectedVersionId}/diff?base_version_id=${base.id}`,
+      `${api}/orders/${selectedId}/versions/${selectedVersion.id}/diff?base_version_id=${baseVersionId}`,
     )
       .then((r) => (r.ok ? r.json() : { changes: [] }))
       .then((data) => setChanges(data.changes));
-  }, [selectedId, selectedVersionId, versions]);
+  }, [selectedId, selectedVersion, baseVersionId]);
 
   useEffect(() => {
     for (const draft of drafts) {
@@ -83,8 +105,22 @@ export default function Home() {
   function selectOrder(id: number) {
     setSelectedId(id);
     setSelectedVersionId(null);
+    setBaseVersionId(null);
     setEditing(false);
     setChanges([]);
+  }
+
+  function selectVersion(id: number) {
+    setSelectedVersionId(id);
+    const version = versions.find((candidate) => candidate.id === id);
+    const previous = version
+      ? [...versions]
+          .filter(
+            (candidate) => candidate.version_number < version.version_number,
+          )
+          .sort((left, right) => right.version_number - left.version_number)[0]
+      : null;
+    setBaseVersionId(previous?.id ?? null);
   }
   function beginEdit() {
     if (selectedVersion) {
@@ -139,7 +175,9 @@ export default function Home() {
     );
     if (response.ok) {
       await loadOrder(selectedId);
-      toast.success(action === "accept" ? "Change accepted" : "Change discarded");
+      toast.success(
+        action === "accept" ? "Change accepted" : "Change discarded",
+      );
       return;
     }
     toast.error("Could not update the change proposal.");
@@ -153,13 +191,17 @@ export default function Home() {
             <FileText className="h-4 w-4" />
           </div>
           <div>
-            <h1 className="text-[15px] font-semibold tracking-tight">Procurement Assistant</h1>
+            <h1 className="text-[15px] font-semibold tracking-tight">
+              Procurement Assistant
+            </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Purchase-order acknowledgements
             </p>
           </div>
         </div>
-        <Badge className="border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50">Live workflow status</Badge>
+        <Badge className="border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50">
+          Live workflow status
+        </Badge>
       </header>
       <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
         <OrderSidebar
@@ -213,8 +255,10 @@ export default function Home() {
               <VersionPanel
                 versions={versions}
                 activeVersionId={selectedVersion.id}
+                baseVersionId={baseVersionId}
                 changes={changes}
-                onSelect={setSelectedVersionId}
+                onSelect={selectVersion}
+                onBaseSelect={setBaseVersionId}
               />
               {editing && (
                 <Card>
@@ -258,8 +302,13 @@ export default function Home() {
           ) : (
             <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 text-center">
               <FileText className="mb-4 h-9 w-9 text-slate-300" />
-              <h2 className="text-base font-semibold text-slate-800">Your order workspace is ready</h2>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">Send a supplier acknowledgement through the email simulator to create your first order and see its processing timeline here.</p>
+              <h2 className="text-base font-semibold text-slate-800">
+                Your order workspace is ready
+              </h2>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
+                Send a supplier acknowledgement through the email simulator to
+                create your first order and see its processing timeline here.
+              </p>
             </div>
           )}
         </section>

@@ -44,9 +44,16 @@ def _diff_values(before: Any, after: Any, path: str, changes: list[VersionChange
                 before_item = before_by_item.get(key)
                 after_item = after_by_item.get(key)
                 label = (after_item or before_item or {}).get("description", "Unknown item")
-                clean_before = {name: value for name, value in (before_item or {}).items() if name != "line_number"}
-                clean_after = {name: value for name, value in (after_item or {}).items() if name != "line_number"}
-                _diff_values(clean_before or None, clean_after or None, f"line_items[{label}]", changes)
+                item_path = f"line_items[{label}]"
+                if before_item is None:
+                    changes.append(VersionChange(path=f"{item_path}.status", before="Not present", after="Added"))
+                    continue
+                if after_item is None:
+                    changes.append(VersionChange(path=f"{item_path}.status", before="Present", after="Removed"))
+                    continue
+                clean_before = {name: value for name, value in before_item.items() if name != "line_number"}
+                clean_after = {name: value for name, value in after_item.items() if name != "line_number"}
+                _diff_values(clean_before, clean_after, item_path, changes)
             return
     if before != after:
         changes.append(VersionChange(path=path, before=before, after=after))
