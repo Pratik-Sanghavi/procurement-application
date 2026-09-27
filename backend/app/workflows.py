@@ -12,6 +12,7 @@ with workflow.unsafe.imports_passed_through():
         persist_supplier_version,
         set_processing_stage,
         stitch_order_snapshot,
+        validate_order_snapshot,
     )
     from .chat_activities import answer_order_question, classify_chat_intent, propose_order_change, respond_to_unsupported_request
 
@@ -61,12 +62,23 @@ class PurchaseOrderProcessingWorkflow:
                 )
             snapshot = await workflow.execute_activity(
                 stitch_order_snapshot,
+        validate_order_snapshot,
                 args=[partial_snapshots],
                 start_to_close_timeout=timedelta(minutes=1),
             )
             await workflow.execute_activity(
                 set_processing_stage,
-                args=[run["processing_run_id"], "snapshot_extracted", database_path],
+                args=[run["processing_run_id"], "snapshot_stitched", database_path],
+                start_to_close_timeout=timedelta(seconds=30),
+            )
+            snapshot = await workflow.execute_activity(
+                validate_order_snapshot,
+                args=[snapshot],
+                start_to_close_timeout=timedelta(seconds=30),
+            )
+            await workflow.execute_activity(
+                set_processing_stage,
+                args=[run["processing_run_id"], "snapshot_validated", database_path],
                 start_to_close_timeout=timedelta(seconds=30),
             )
             return await workflow.execute_activity(

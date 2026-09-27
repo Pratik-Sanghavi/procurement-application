@@ -182,6 +182,12 @@ def stitch_order_snapshot(chunk_data: list[dict]) -> dict:
     return snapshot.model_dump(mode="json")
 
 @activity.defn
+def validate_order_snapshot(snapshot_data: dict) -> dict:
+    """Reject structurally incomplete extractions before any order data is written."""
+    snapshot = OrderSnapshotInput.model_validate(snapshot_data)
+    return snapshot.model_dump(mode="json")
+
+@activity.defn
 def persist_supplier_version(email_id: int, processing_run_id: int, snapshot_data: dict, database_path: str) -> dict[str, int]:
     """Persist exactly one order version per source email despite activity retries."""
     snapshot = OrderSnapshotInput.model_validate(snapshot_data)

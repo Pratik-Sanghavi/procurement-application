@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SupplierData(BaseModel):
@@ -56,6 +56,15 @@ class OrderSnapshotInput(BaseModel):
     shipping: ShippingData = Field(default_factory=ShippingData)
     financial_summary: FinancialSummaryData = Field(default_factory=FinancialSummaryData)
     line_items: list[LineItemData] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_complete_line_item_set(self) -> "OrderSnapshotInput":
+        if not self.line_items:
+            raise ValueError("Acknowledgement must contain at least one line item before it can be persisted")
+        line_numbers = [item.line_number for item in self.line_items]
+        if len(line_numbers) != len(set(line_numbers)):
+            raise ValueError("Acknowledgement contains duplicate line numbers")
+        return self
 
 class OrderSnapshotChunk(BaseModel):
     """A partial extraction from a bounded range of acknowledgement pages."""
