@@ -23,7 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 
 import {
   apiBaseUrl as api,
-  websocketBaseUrl as wsBase,
   versionSnapshot as snapshot,
   type VersionChange as Change,
 } from "@/lib/procurement";
