@@ -53,7 +53,9 @@ export default function Home() {
   const selectedVersion = useMemo(
     () =>
       versions.find((version) => version.id === selectedVersionId) ??
-      versions[0] ??
+      [...versions].sort(
+        (left, right) => right.version_number - left.version_number,
+      )[0] ??
       null,
     [versions, selectedVersionId],
   );

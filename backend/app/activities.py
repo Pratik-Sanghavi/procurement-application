@@ -100,23 +100,30 @@ def extract_pdf_text_chunks(attachment_id: int, database_path: str) -> list[str]
             raise ValueError(f"Attachment {attachment_id} does not exist")
         reader = PdfReader(io.BytesIO(attachment.content))
         pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
-    max_chunk_characters = 2_000
+    # Keep records intact across section boundaries: overlapping sections mean a
+    # multi-line row is complete in at least one model call.
+    max_chunk_characters = 3_000
+    overlap_characters = 800
     chunks: list[str] = []
     for page_number, page_text in enumerate(pages, start=1):
         text = page_text.strip()
         if not text:
             continue
         page_prefix = f"--- Page {page_number} ---\n"
-        while text:
-            available = max_chunk_characters - len(page_prefix)
-            if len(text) <= available:
-                chunks.append(page_prefix + text)
+        available = max_chunk_characters - len(page_prefix)
+        start = 0
+        while start < len(text):
+            end = min(start + available, len(text))
+            if end < len(text):
+                split_at = text.rfind("\n", start, end)
+                if split_at > start + (available // 2):
+                    end = split_at
+            section = text[start:end].strip()
+            if section:
+                chunks.append(page_prefix + section)
+            if end >= len(text):
                 break
-            split_at = text.rfind("\n", 0, available)
-            if split_at <= available // 2:
-                split_at = available
-            chunks.append(page_prefix + text[:split_at].strip())
-            text = text[split_at:].lstrip()
+            start = max(start + 1, end - overlap_characters)
     if not chunks:
         raise ValueError("PDF has no extractable text; OCR is not enabled")
     return chunks
@@ -130,18 +137,18 @@ def extract_order_snapshot_chunk(pdf_text: str) -> dict:
         raise RuntimeError("OPENAI_API_KEY is required to process purchase-order PDFs")
     completion = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
         model=settings.openai_chunk_extraction_model,
-        max_tokens=4_096,
-        temperature=0,
+        max_completion_tokens=32_768,
+        reasoning_effort="low",
         messages=[
             {
                 "role": "system",
                 "content": (
                     "Extract facts from this one purchase-order acknowledgement section. "
                     "Return only a JSON object. Omit fields that are not explicitly present. "
-                    "If this section has no useful order facts, return {}. "
+                    "If this section has no useful order facts, return {}. This section can overlap its neighbours: extract every complete non-label product record that is visible. Product records can span several physical lines. Do not collapse distinct product descriptions or skip an item because one optional field is unavailable. Ignore zero-priced Label, PLLabel, and XLLabel rows. If a product record is cut by a section boundary, omit the partial record because it is complete in an overlapping section. "
                     "Allowed top-level fields are supplier_order_number, supplier, details, shipping, "
                     "financial_summary, and line_items. supplier requires name when present. "
-                    "Each line item requires line_number and description; optional item fields are size, "
+                    "Each line item requires line_number and description; use any positive temporary integer for line_number because the application assigns the final line numbers after merging. Optional item fields are size, "
                     "ordered_quantity, confirmed_quantity, catalog_price, customer_price, "
                     "variety_license_fee, extended_line_amount, item_notes, and scheduled_shipping_date_or_week. "
                     "Map printed price headers exactly: Cat. Price to catalog_price, Your Price to customer_price, Var. Lic. Fee to variety_license_fee, and Ext. Price to extended_line_amount. Do not infer price meaning from extraction-text order. Do not invent facts and do not repeat rows from other sections."
@@ -212,25 +219,45 @@ def stitch_order_snapshot(chunk_data: list[dict]) -> dict:
     supplier_values = _merge_fields(parts, "supplier", SupplierData)
     if not supplier_order_number or not supplier_values.get("name"):
         raise ValueError("Acknowledgement sections did not provide supplier order number and supplier name")
-    items_by_number: dict[int, LineItemData] = {}
+    # Supplier acknowledgements do not provide a dependable line identifier. In
+    # particular, models may mistake the ordered quantity (e.g. 720) for one.
+    # Merge overlapping extraction results by product identity instead, then give
+    # the persisted version stable sequential line numbers.
+    items_by_identity: dict[tuple[object, ...], LineItemData] = {}
     for part in parts:
         for item in part.line_items:
-            existing = items_by_number.get(item.line_number)
+            item_data = item.model_dump()
+            identity = (
+                " ".join(item.description.casefold().split()),
+                item.size,
+                item.ordered_quantity,
+                item.confirmed_quantity,
+                item.catalog_price,
+                item.customer_price,
+                item.variety_license_fee,
+                item.extended_line_amount,
+                item.scheduled_shipping_date_or_week,
+            )
+            existing = items_by_identity.get(identity)
             if existing is None:
-                items_by_number[item.line_number] = item
+                items_by_identity[identity] = item
                 continue
             combined = existing.model_dump()
-            for field_name, value in item.model_dump().items():
+            for field_name, value in item_data.items():
                 if field_name != "line_number" and value is not None and combined.get(field_name) is None:
                     combined[field_name] = value
-            items_by_number[item.line_number] = LineItemData.model_validate(combined)
+            items_by_identity[identity] = LineItemData.model_validate(combined)
+    line_items = [
+        item.model_copy(update={"line_number": index})
+        for index, item in enumerate(items_by_identity.values(), start=1)
+    ]
     snapshot = OrderSnapshotInput(
         supplier_order_number=supplier_order_number,
         supplier=SupplierData(**supplier_values),
         details=OrderDetailsData(**_merge_fields(parts, "details", OrderDetailsData)),
         shipping=ShippingData(**_merge_fields(parts, "shipping", ShippingData)),
         financial_summary=FinancialSummaryData(**_merge_fields(parts, "financial_summary", FinancialSummaryData)),
-        line_items=[items_by_number[number] for number in sorted(items_by_number)],
+        line_items=line_items,
     )
     return snapshot.model_dump(mode="json")
 

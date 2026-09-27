@@ -11,8 +11,14 @@ export type OrderSummary = {
 export type LineItem = {
   line_number: number;
   description: string;
-  confirmed_quantity: number | null;
-  customer_price: number | null;
+  size: string | null;
+  ordered_quantity: string | null;
+  confirmed_quantity: string | null;
+  catalog_price: string | null;
+  customer_price: string | null;
+  variety_license_fee: string | null;
+  extended_line_amount: string | null;
+  item_notes: string | null;
   scheduled_shipping_date_or_week: string | null;
 };
 export type OrderVersion = {
