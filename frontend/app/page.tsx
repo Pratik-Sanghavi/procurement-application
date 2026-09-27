@@ -1,24 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  Check,
-  ChevronRight,
-  FileText,
-  GitCompareArrows,
-  Loader2,
-  MessageSquare,
-  Pencil,
-  Save,
-  Send,
-  X,
-} from "lucide-react";
+import { FileText, Pencil, Save, X } from "lucide-react";
 
 import { useOrderWorkspace } from "@/hooks/use-order-workspace";
+import { LineItemsTable } from "@/components/procurement/line-items-table";
+import { OrderChat } from "@/components/procurement/order-chat";
+import { OrderSidebar } from "@/components/procurement/order-sidebar";
+import { ProcessingCard } from "@/components/procurement/processing-card";
+import { VersionPanel } from "@/components/procurement/version-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -152,33 +145,12 @@ export default function Home() {
         <Badge className="border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-emerald-700 hover:bg-emerald-50">Live workflow status</Badge>
       </header>
       <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
-        <aside className="border-r border-slate-200 bg-white/80 p-5">
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Orders
-          </p>
-          {loading ? (
-            <Loader2 className="m-4 h-5 w-5 animate-spin" />
-          ) : orders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No orders have been processed yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {orders.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => selectOrder(item.id)}
-                  className={`w-full rounded-md border p-3 text-left text-sm ${selectedId === item.id ? "border-primary bg-primary/5" : "hover:bg-muted"}`}
-                >
-                  <p className="font-medium">#{item.supplier_order_number}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {item.status}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-        </aside>
+        <OrderSidebar
+          orders={orders}
+          selectedId={selectedId}
+          loading={loading}
+          onSelect={selectOrder}
+        />
         <section className="space-y-6 p-7 lg:p-8">
           {selectedVersion ? (
             <>
@@ -221,53 +193,12 @@ export default function Home() {
                   </Card>
                 </div>
               </div>
-              <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Versions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1">
-                    {versions.map((version) => (
-                      <button
-                        key={version.id}
-                        onClick={() => setSelectedVersionId(version.id)}
-                        className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm ${selectedVersionId === version.id ? "bg-muted font-medium" : "hover:bg-muted/60"}`}
-                      >
-                        <span>Version {version.version_number}</span>
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    ))}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <GitCompareArrows className="h-4 w-4" />
-                      Changes from previous version
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {changes.length ? (
-                      <ul className="space-y-2 text-sm">
-                        {changes.slice(0, 8).map((change) => (
-                          <li key={change.path}>
-                            <span className="font-medium">{change.path}</span>
-                            <span className="ml-2 text-muted-foreground">
-                              {String(change.before ?? "—")} →{" "}
-                              {String(change.after ?? "—")}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Select a non-current version or wait for a revision to
-                        compare.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+              <VersionPanel
+                versions={versions}
+                activeVersionId={selectedVersion.id}
+                changes={changes}
+                onSelect={setSelectedVersionId}
+              />
               {editing && (
                 <Card>
                   <CardHeader>
@@ -300,41 +231,7 @@ export default function Home() {
                   </CardContent>
                 </Card>
               )}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Line items</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="min-h-[18rem] max-h-[calc(100vh-20rem)] overflow-auto">
-                    <table className="min-w-[760px] w-full text-sm">
-                    <thead className="sticky top-0 z-10 border-y bg-muted text-left text-xs text-muted-foreground shadow-sm">
-                      <tr>
-                        <th className="p-3">Description</th>
-                        <th className="p-3">Confirmed</th>
-                        <th className="p-3">Your price</th>
-                        <th className="p-3">Ship week</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedVersion.line_items.map((item) => (
-                        <tr key={item.line_number} className="border-b">
-                          <td className="p-3 font-medium">
-                            {item.description}
-                          </td>
-                          <td className="p-3">
-                            {item.confirmed_quantity ?? "—"}
-                          </td>
-                          <td className="p-3">{item.customer_price ?? "—"}</td>
-                          <td className="p-3">
-                            {item.scheduled_shipping_date_or_week ?? "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </CardContent>
-              </Card>
+              <LineItemsTable items={selectedVersion.line_items} />
             </>
           ) : (
             <div className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 text-center">
@@ -345,92 +242,17 @@ export default function Home() {
           )}
         </section>
         <aside className="border-l border-slate-200 bg-white/80 p-5">
-          <Card className="mb-5 border-slate-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-sm">Processing</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {processing[0] ? (
-                <div className="text-sm">
-                  <Badge
-                    variant={
-                      processing[0].status === "failed"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {processing[0].status}
-                  </Badge>
-                  <p className="mt-2">
-                    {processing[0].stage ?? "Waiting to start"}
-                  </p>
-                  {processing[0].error_summary && (
-                    <p className="mt-2 text-xs text-destructive">
-                      {processing[0].error_summary}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No processing run yet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <div className="mb-4 flex items-center gap-2 text-slate-800">
-            <MessageSquare className="h-4 w-4" />
-            <h2 className="font-semibold">Order chat</h2>
-          </div>
-          <div className="space-y-3">
-            {messages.map((item) => (
-              <div
-                key={item.id}
-                className={`rounded-md p-3 text-sm ${item.sender_type === "human" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 bg-muted"}`}
-              >
-                {item.content}
-              </div>
-            ))}
-          </div>
-          <Separator className="my-4" />
-          {drafts.map((draft) => (
-            <Card key={draft.id} className="mb-3">
-              <CardContent className="p-3">
-                <p className="text-sm font-medium">Proposed change</p>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => resolveDraft(draft.id, "accept")}
-                  >
-                    <Check className="mr-1 h-3 w-3" />
-                    Accept
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => resolveDraft(draft.id, "discard")}
-                  >
-                    Discard
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          <form onSubmit={sendMessage} className="mt-4">
-            <Textarea
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="Ask about this order or request a change…"
-            />
-            <Button
-              type="submit"
-              className="mt-2 w-full"
-              disabled={!selectedId || !message.trim()}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Send
-            </Button>
-            {chatError && <p className="mt-2 text-sm text-destructive">{chatError}</p>}
-          </form>
+          <ProcessingCard run={processing[0]} />
+          <OrderChat
+            messages={messages}
+            drafts={drafts}
+            message={message}
+            disabled={!selectedId}
+            error={chatError}
+            setMessage={setMessage}
+            onSend={sendMessage}
+            onResolve={resolveDraft}
+          />
         </aside>
       </div>
     </main>

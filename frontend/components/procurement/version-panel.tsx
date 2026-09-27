@@ -4,12 +4,12 @@ import type { OrderVersion, VersionChange } from "@/lib/procurement";
 
 export function VersionPanel({
   versions,
-  selectedVersionId,
+  activeVersionId,
   changes,
   onSelect,
 }: {
   versions: OrderVersion[];
-  selectedVersionId: number | null;
+  activeVersionId: number | null;
   changes: VersionChange[];
   onSelect: (id: number) => void;
 }) {
@@ -24,7 +24,7 @@ export function VersionPanel({
             <button
               key={version.id}
               onClick={() => onSelect(version.id)}
-              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm ${selectedVersionId === version.id ? "bg-muted font-medium" : "hover:bg-muted/60"}`}
+              className={`flex w-full items-center justify-between rounded px-2 py-2 text-left text-sm ${activeVersionId === version.id ? "bg-muted font-medium" : "hover:bg-muted/60"}`}
             >
               <span>Version {version.version_number}</span>
               <ChevronRight className="h-4 w-4" />
